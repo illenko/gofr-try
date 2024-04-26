@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/api/v1/cards"
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": 3000,
+    "jsonBody": [
+      {
+        "id": "d8b25784-c16f-449a-9006-6972e8a9111b",
+        "account": "UA056121939579211953568943253",
+        "number": "8371844608383352",
+        "expirationMonth": "02",
+        "expirationYear": "25",
+        "currency": "₴",
+        "balance": 12345.00
+      },
+      {
+        "id": "9d9ee76c-438f-47a6-90e5-6b52091dbe38",
+        "account": "UA056121939579211953568943253",
+        "number": "2326891354502911",
+        "expirationMonth": "01",
+        "expirationYear": "26",
+        "currency": "$",
+        "balance": 33122.00
+      }
+    ],
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}
