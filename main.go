@@ -36,27 +36,10 @@ type card struct {
 	Skin            string    `json:"skin"`
 }
 
-type config struct {
+type cardConfig struct {
 	Id    uuid.UUID `json:"id"`
 	Title string    `json:"title"`
 	Skin  string    `json:"skin"`
-}
-
-func (u *config) Create(c *gofr.Context) (interface{}, error) {
-	var cfg config
-
-	err := c.Bind(&cfg)
-
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = c.SQL.ExecContext(c, "INSERT INTO config (Id, Title, Skin) VALUES ($1, $2, $3)", cfg.Id, cfg.Title, cfg.Skin)
-
-	if err != nil {
-		return nil, err
-	}
-	return cfg, nil
 }
 
 func main() {
@@ -64,9 +47,7 @@ func main() {
 
 	app.Migrate(migrations.All())
 
-	app.AddRESTHandlers(&config{})
-
-	app.AddHTTPService("core-banking-system", "http://localhost:8081")
+	app.AddHTTPService("core-banking-system", app.Config.Get("CORE_BANKING_SYSTEM_URL"))
 
 	app.GET("/cards", func(c *gofr.Context) (interface{}, error) {
 		externalCards, err := getCards(c)
@@ -74,7 +55,7 @@ func main() {
 			return nil, err
 		}
 
-		configs, err := getConfigs(c, err)
+		configs, err := getConfigs(c)
 		if err != nil {
 			return nil, err
 		}
@@ -84,25 +65,66 @@ func main() {
 		return cardResponse, nil
 	})
 
+	app.PUT("/card-configs/{cardId}", updateCardConfig)
+
 	app.Run()
 }
 
-func getConfigs(c *gofr.Context, err error) (map[uuid.UUID]*config, error) {
-	rows, err := c.SQL.QueryContext(c, "SELECT Id, Title, Skin FROM config")
+func updateCardConfig(c *gofr.Context) (interface{}, error) {
+	var cfg cardConfig
+
+	err := c.Bind(&cfg)
+
+	id := uuid.MustParse(c.PathParam("cardId"))
+
 	if err != nil {
 		return nil, err
 	}
 
-	var configs map[uuid.UUID]*config
+	rows, err := c.SQL.QueryContext(c, "SELECT id, title, skin FROM card_config where id = $1", id)
+	if err != nil {
+		return nil, err
+	}
+
+	if rows.Next() {
+		c.Info("Updating existing config")
+		_, err := c.SQL.ExecContext(c, "UPDATE card_config SET title = $1, skin = $2 where id = $3", cfg.Title, cfg.Skin, id)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		c.Info("Inserting new config")
+		_, err := c.SQL.ExecContext(c, "INSERT INTO card_config (id, title, skin) VALUES ($1, $2, $3)", id, cfg.Title, cfg.Skin)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return cardConfig{
+		Id:    id,
+		Title: cfg.Title,
+		Skin:  cfg.Skin,
+	}, nil
+}
+
+func getConfigs(c *gofr.Context) (map[uuid.UUID]*cardConfig, error) {
+	rows, err := c.SQL.QueryContext(c, "SELECT id, title, skin FROM card_config")
+	if err != nil {
+		return nil, err
+	}
+
+	configs := make(map[uuid.UUID]*cardConfig)
 
 	for rows.Next() {
-		var cfg config
+		var cfg cardConfig
 		if err := rows.Scan(&cfg.Id, &cfg.Title, &cfg.Skin); err != nil {
 			return nil, err
 		}
 
 		configs[cfg.Id] = &cfg
 	}
+	c.Info("Retrieved configs from database")
+
 	return configs, nil
 }
 
@@ -138,7 +160,7 @@ func getCards(c *gofr.Context) ([]externalCard, error) {
 	return externalCards, nil
 }
 
-func toCardResponse(externalCards []externalCard, configs map[uuid.UUID]*config) (cards []card) {
+func toCardResponse(externalCards []externalCard, configs map[uuid.UUID]*cardConfig) (cards []card) {
 	for _, c := range externalCards {
 		var title, skin string
 		cfg := configs[c.Id]
